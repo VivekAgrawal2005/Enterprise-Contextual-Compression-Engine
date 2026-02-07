@@ -2,6 +2,9 @@
 
 > **A traceable, decision-critical fact extraction and compression system powered by Liquid Neural Networks**
 
+Presentation Link for Project: https://prezi.com/view/if7EZfjy2powm08iHSrx/?referral_token=OVuAjIlnB3FN
+Video Link: https://drive.google.com/file/d/1aWyDdh0dSNPx88tC-oas2x440rr5c4wb/view?usp=sharing
+
 [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-orange.svg)](https://pytorch.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
