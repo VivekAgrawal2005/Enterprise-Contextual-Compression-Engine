@@ -2,6 +2,9 @@
 
 > **A traceable, decision-critical fact extraction and compression system powered by Liquid Neural Networks**
 
+Presentation Link for Project: https://prezi.com/view/if7EZfjy2powm08iHSrx/?referral_token=OVuAjIlnB3FN
+Video Link: https://drive.google.com/file/d/1aWyDdh0dSNPx88tC-oas2x440rr5c4wb/view?usp=sharing
+
 [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-orange.svg)](https://pytorch.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -71,6 +74,24 @@ We introduce **Contextual Compression**—a hybrid approach that:
 ---
 
 ## 3. Our Contextual Compression Approach
+
+## Tech Stack
+
+| Component             | Technology                     |
+|----------------------|--------------------------------|
+| Document Ingestion    | PDFPlumber, PyPDF2            |
+| Text Chunking         | Custom Python                 |
+| Embedding Generation  | Sentence Transformers, PyTorch|
+| Vector Search         | FAISS                         |
+| Entity Extraction     | spaCy                         |
+| Knowledge Graph       | Custom Graph Builder          |
+| Answer Generation     | Ollama + LLaMA 3              |
+| Explainability Layer  | Custom Traceability Engine    |
+| Interactive Interface | Python CLI                    |
+
+
+## Architecture Diagram
+<img width="2116" height="490" alt="Aerchitecture Diagram" src="https://github.com/user-attachments/assets/9b6f3a6d-42f0-4a8d-b556-e1fab7508593" />
 
 ### Core Principles
 
@@ -405,25 +426,86 @@ Input file: sample.txt
 
 [Processing logs...]
 
-================================================================================
-  STEP 3: Compression Results
-================================================================================
+--------------------------------------------------------------------------------
+DOCUMENT INFORMATION
+--------------------------------------------------------------------------------
 Document ID: sample
-Total Facts Extracted: 47
-Important Facts Selected: 23
-Compression Ratio: 48.94%
+Author: unknown
+Category: general
+Total Facts: 84
+Retained Facts: 84
+Information Retention: 100.00%
 
 ================================================================================
-  STEP 4: Top Important Facts
+INTERACTIVE QUERY MODE
 ================================================================================
 
-1. Importance Score: 0.912
-   Type: THRESHOLD
-   Fact: The maximum daily withdrawal limit for personal accounts is $5,000.
-   Source: sample_section_0
-   Paragraph: sample_section_0_para_0
+Enter your questions below.
+Commands:
+  - Type 'exit' or 'quit' to exit
+  - Type 'help' for help
+  - Type 'stats' to see compression statistics
 
-[... additional facts ...]
+
+Ask question: What audits must be conducted and what are the threshold values for uptime?
+
+Searching for: 'What audits must be conducted and what are the threshold values for uptime?'...
+INFO:query_engine:Query returned 5 results
+
+Found 5 matching fact(s):
+--------------------------------------------------------------------------------
+
+1. Fact: Any security breach affecting more than 1,000 customer records must be reported to regulatory authorities within 72 hours
+   Type: NUMBER,RISK,CONSTRAINT,COMPLIANCE
+   Similarity Score: 0.434
+   Importance Score: 0.596
+   Confidence Score: 1.000
+   Source: sample_section_10
+
+2. Fact: The risk assessment must be completed within 4 hours of transaction initiation
+   Type: NUMBER,RISK,CONSTRAINT
+   Similarity Score: 0.403
+   Importance Score: 0.601
+   Confidence Score: 1.000
+   Source: sample_section_6
+
+3. Fact: Core banking systems must maintain 99.9% uptime availability
+   Type: NUMBER,CONSTRAINT
+   Similarity Score: 0.396
+   Importance Score: 0.598
+   Confidence Score: 1.000
+   Source: sample_section_22
+
+4. Fact: The investigation must be completed within 48 hours
+   Type: NUMBER,CONSTRAINT
+   Similarity Score: 0.373
+   Importance Score: 0.598
+   Confidence Score: 1.000
+   Source: sample_section_7
+
+5. Fact: However, all exceptions must be documented and reported to the board of directors within 30 days       
+   Type: NUMBER,CONSTRAINT,EXCEPTION
+   Similarity Score: 0.372
+   Importance Score: 0.603
+   Confidence Score: 1.000
+   Source: sample_section_16
+--------------------------------------------------------------------------------
+
+Show original source for top result? (yes/no): yes
+================================================================================
+ORIGINAL SOURCE TEXT
+================================================================================
+Section: Regulatory Compliance Standards
+Document: sample
+
+Original Paragraph:
+------------------------------------------------------------
+The organization maintains compliance with PCI DSS Level 1 standards at all times. Any security breach affecting more than 1,000 customer records must be reported to regulatory authorities within 72 hours.
+------------------------------------------------------------
+
+Ask question:
+
+Exiting query engine. Goodbye!
 ```
 
 ---
