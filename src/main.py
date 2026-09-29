@@ -14,15 +14,26 @@ import logging
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
 
-from ingestion import DocumentIngester
-from chunking import HierarchicalChunker
-from extraction import FactExtractor
-from liquid_nn import ImportanceScorer
-from traceability import TraceabilityManager
-from compression import HierarchicalCompressor
-from threshold_tuner import ThresholdTuner
-from validation import Validator
-from drilldown import DrillDownManager
+try:
+    from .ingestion import DocumentIngester
+    from .chunking import HierarchicalChunker
+    from .extraction import FactExtractor
+    from .liquid_nn import ImportanceScorer
+    from .traceability import TraceabilityManager
+    from .compression import HierarchicalCompressor
+    from .threshold_tuner import ThresholdTuner
+    from .validation import Validator
+    from .drilldown import DrillDownManager
+except ImportError:
+    from ingestion import DocumentIngester
+    from chunking import HierarchicalChunker
+    from extraction import FactExtractor
+    from liquid_nn import ImportanceScorer
+    from traceability import TraceabilityManager
+    from compression import HierarchicalCompressor
+    from threshold_tuner import ThresholdTuner
+    from validation import Validator
+    from drilldown import DrillDownManager
 
 logging.basicConfig(
     level=logging.INFO,
