@@ -28,6 +28,7 @@ Modern enterprises generate and consume massive volumes of policy documents, reg
 ### Real-World Impact
 
 Consider a financial services policy document:
+
 - **Traditional Summarization**: "The document outlines withdrawal limits and risk management procedures."
 - **What Decision-Makers Need**: "Personal accounts: $5,000 daily limit. Business accounts: $25,000. Wire transfers above $100,000 require AML screening within 72 hours."
 
@@ -61,6 +62,7 @@ Traditional NLP summarization approaches (extractive and abstractive) suffer fro
 ### Our Solution: Contextual Compression
 
 We introduce **Contextual Compression**—a hybrid approach that:
+
 - **Extracts** decision-critical facts with precision
 - **Scores** importance using neural networks
 - **Compresses** hierarchically while preserving structure
@@ -123,18 +125,21 @@ src/
 ### Component Responsibilities
 
 #### **Ingestion Module** (`ingestion.py`)
+
 - Supports multiple formats: `.txt`, `.pdf`
 - Implements fallback strategies (pdfplumber → PyPDF2)
 - Handles encoding variations
 - Extracts metadata (document ID, file type)
 
 #### **Chunking Module** (`chunking.py`)
+
 - Detects section headers using pattern matching
 - Creates hierarchical structure: Document → Sections → Paragraphs
 - Handles various document formats (markdown, numbered sections, etc.)
 - Preserves document structure for traceability
 
 #### **Extraction Module** (`extraction.py`)
+
 - Pattern-based extraction for:
   - **Numbers**: Currency, percentages, thresholds
   - **Thresholds**: Maximum, minimum, limits, caps
@@ -146,6 +151,7 @@ src/
 - Deduplication and fact type classification
 
 #### **Liquid Neural Network Module** (`liquid_nn.py`)
+
 - PyTorch-based implementation
 - Uses sentence transformers for fact embeddings
 - Liquid state dynamics for importance scoring
@@ -153,12 +159,14 @@ src/
 - Supports pre-trained model loading
 
 #### **Traceability Module** (`traceability.py`)
+
 - Maintains source mapping for every fact
 - Generates unique trace IDs
 - Enriches facts with source metadata
 - Enables drill-down to original text
 
 #### **Compression Module** (`compression.py`)
+
 - Hierarchical compression:
   - Document-level fact selection
   - Section-level compression
@@ -167,6 +175,7 @@ src/
 - Generates structured JSON output
 
 #### **Main Pipeline** (`main.py`)
+
 - Orchestrates complete pipeline
 - Error handling and logging
 - Command-line interface
@@ -201,6 +210,7 @@ LiquidNeuralNetwork(
 **The LNN outputs importance scores only—it never generates text.**
 
 This ensures:
+
 - **Deterministic Fact Preservation**: Facts are extracted verbatim, not generated
 - **No Hallucination Risk**: No text generation means no approximation errors
 - **Traceability**: Every score maps to an extracted fact with known source
@@ -254,6 +264,7 @@ Every compressed fact includes complete traceability metadata:
 ## 7. Example Compressed Output
 
 ### Input Document
+
 Enterprise Financial Services Policy (135 lines, ~8,000 words)
 
 ### Compressed Output
@@ -333,6 +344,7 @@ python demo.py
 ```
 
 The demo will:
+
 1. Load `sample.txt` (enterprise policy document)
 2. Run the complete pipeline
 3. Display compression statistics
@@ -443,24 +455,72 @@ Compression Ratio: 48.94%
 
 ---
 
+## Reliability and Failure Handling
+
+This project is intentionally a domain-scoped document intelligence system, not a general-purpose assistant. It answers questions only from the indexed enterprise policy corpus and rejects requests outside that corpus before returning results.
+
+### Why the reliability fix was needed
+
+The original failure mode was caused by nearest-neighbor semantic retrieval without a relevance gate. A query such as "What is the weather in Pune today?" could still surface the highest-scoring fact in the index even when the fact was unrelated to the user request. This is a retrieval safety issue, not a content-generation issue: the system was selecting the closest item in embedding space instead of confirming that the query was meaningfully grounded in the corpus.
+
+### Current behavior
+
+The retrieval pipeline now applies a configurable relevance threshold in the query engine:
+
+- Queries are accepted only when their best semantic similarity exceeds the configured threshold.
+- Queries below the threshold are treated as out-of-domain and return no answers.
+- The message returned is explicit: the system only answers questions contained within the indexed document corpus.
+
+This is a generic safeguard rather than a hard-coded weather or topic blocklist. It prevents unrelated prompts from being answered with policy facts that merely look similar.
+
+### Verified metrics
+
+The current threshold is set to 0.35 and was validated on representative examples:
+
+- Valid in-domain examples: 0.8260, 0.9019, 0.7194, 0.8411
+- Unsupported examples: 0.2040, 0.1125, 0.0475, 0.0947, 0.2862
+
+This separation is strong enough to reject unsupported queries while preserving legitimate retrievals in the same corpus.
+
+### Known limitations
+
+- The system is corpus-bound. It does not infer external facts, live data, or general world knowledge.
+- The embedding model is general-purpose and may still produce non-zero similarity to unrelated text; the threshold is the control used to reject those cases.
+- The prototype is strong for traceable policy-based retrieval, but it is not a production search engine, RAG system, or conversational agent with enterprise-grade safety controls.
+- It is still sensitive to corpus quality: if the indexed facts are incomplete or weakly curated, the model may not find a sufficiently relevant match even for legitimate questions.
+
+### What I would do differently in production
+
+1. Add explicit domain metadata and a curated document taxonomy before retrieval.
+2. Run threshold calibration on a labeled evaluation set for each corpus and business use case.
+3. Add a fallback response layer that explains why a query is unsupported instead of silently failing.
+4. Track retrieval diagnostics and false positives over time to tune the gate with evidence.
+5. Combine embedding similarity with metadata filters, section-aware retrieval, and answerability checks before returning results.
+
+---
+
 ## Use Cases
 
 ### Financial Services
+
 - Policy document compression for compliance teams
 - Risk threshold extraction for risk management
 - Regulatory requirement extraction
 
 ### Legal & Compliance
+
 - Contract analysis and clause extraction
 - Regulatory document processing
 - Policy compliance verification
 
 ### Healthcare
+
 - Clinical guideline compression
 - Protocol extraction
 - Regulatory requirement tracking
 
 ### Enterprise Operations
+
 - Standard operating procedure compression
 - Policy manual fact extraction
 - Compliance documentation processing
@@ -482,6 +542,7 @@ Compression Ratio: 48.94%
 ## Contributing
 
 This is an enterprise-grade system designed for production use. Contributions should maintain:
+
 - Type hints and comprehensive docstrings
 - Unit tests for new features
 - Backward compatibility

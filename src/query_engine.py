@@ -15,6 +15,12 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+DEFAULT_RELEVANCE_THRESHOLD = 0.35
+NO_RELEVANCE_MESSAGE = (
+    "No sufficiently relevant information was found in the indexed documents. "
+    "This system answers questions only from the information contained in the indexed document corpus."
+)
+
 
 class QueryEngine:
     """
@@ -26,19 +32,23 @@ class QueryEngine:
         compressed_data_path: Optional[str] = None,
         compressed_data: Optional[Dict[str, Any]] = None,
         model_name: str = 'all-MiniLM-L6-v2',
-        top_k: int = 5
+        top_k: int = 5,
+        relevance_threshold: float = DEFAULT_RELEVANCE_THRESHOLD,
+        debug: bool = False
     ):
         """
         Initialize the query engine.
-        
+
         Args:
             compressed_data_path: Path to compressed_output.json file
             compressed_data: Optional pre-loaded compressed data dictionary
             model_name: Sentence transformer model name
             top_k: Number of top results to return
+            relevance_threshold: Minimum similarity score required to accept a query as in-domain
+            debug: Whether to keep verbose decision metadata for each query
         """
         logger.info("Initializing Query Engine...")
-        
+
         # Load compressed data
         if compressed_data is not None:
             self.compressed_data = compressed_data
@@ -46,19 +56,19 @@ class QueryEngine:
             self.compressed_data = self._load_compressed_data(compressed_data_path)
         else:
             raise ValueError("Either compressed_data_path or compressed_data must be provided")
-        
+
         # Extract facts
         self.facts = self.compressed_data.get('compressed_facts', [])
-        
+
         if not self.facts:
             raise ValueError("No compressed facts found in data")
-        
+
         logger.info(f"Loaded {len(self.facts)} compressed facts")
-        
+
         # Initialize sentence transformer
         logger.info(f"Loading sentence transformer model: {model_name}")
         self.model = SentenceTransformer(model_name)
-        
+
         # Generate embeddings for all facts
         logger.info("Generating embeddings for facts...")
         self.fact_texts = [fact.get('fact_text', '') for fact in self.facts]
@@ -67,11 +77,15 @@ class QueryEngine:
             show_progress_bar=False,
             convert_to_numpy=True
         )
-        
+
         logger.info("Query engine initialized successfully")
-        
+
         self.top_k = top_k
+        self.relevance_threshold = relevance_threshold
+        self.debug = debug
         self.drilldown_manager = None
+        self.last_query_debug = {}
+        self.last_query_status = 'UNKNOWN'
     
     def _load_compressed_data(self, file_path: str) -> Dict[str, Any]:
         """
@@ -110,38 +124,70 @@ class QueryEngine:
     ) -> List[Dict[str, Any]]:
         """
         Query compressed facts using semantic similarity.
-        
+
+        The retrieval pipeline first computes candidate matches using the existing
+        similarity mechanism. It then applies a generic relevance gate: if the best
+        candidate is below the configured threshold, the query is treated as
+        out-of-domain and no unrelated facts are returned.
+
         Args:
             query_text: User query string
             top_k: Number of top results to return (overrides default)
-            
+
         Returns:
             List of matching facts with similarity scores, sorted by relevance
         """
         if not query_text.strip():
+            self.last_query_debug = {
+                'query': query_text,
+                'best_similarity': 0.0,
+                'relevance_threshold': self.relevance_threshold,
+                'candidate_count': 0,
+                'status': 'OUT_OF_DOMAIN',
+                'message': NO_RELEVANCE_MESSAGE,
+            }
+            self.last_query_status = 'OUT_OF_DOMAIN'
             return []
-        
+
         k = top_k if top_k is not None else self.top_k
-        
+
         # Generate embedding for query
         query_embedding = self.model.encode(
             [query_text],
             show_progress_bar=False,
             convert_to_numpy=True
         )
-        
+
         # Compute cosine similarity
         similarities = cosine_similarity(query_embedding, self.fact_embeddings)[0]
-        
-        # Get top-k indices
+        best_similarity = float(np.max(similarities)) if len(similarities) else 0.0
         top_indices = np.argsort(similarities)[::-1][:k]
-        
-        # Build results
+
+        self.last_query_debug = {
+            'query': query_text,
+            'best_similarity': round(best_similarity, 4),
+            'relevance_threshold': self.relevance_threshold,
+            'candidate_count': len(top_indices),
+            'status': 'RELEVANT' if best_similarity >= self.relevance_threshold else 'OUT_OF_DOMAIN',
+            'message': NO_RELEVANCE_MESSAGE if best_similarity < self.relevance_threshold else '',
+        }
+        self.last_query_status = self.last_query_debug['status']
+
+        if best_similarity < self.relevance_threshold:
+            logger.info(
+                "Rejecting query as out-of-domain: best_similarity=%.4f, threshold=%.4f, query='%s'",
+                best_similarity,
+                self.relevance_threshold,
+                query_text,
+            )
+            return []
+
+        # Build results for relevant queries
         results = []
         for idx in top_indices:
             fact = self.facts[idx].copy()
             similarity_score = float(similarities[idx])
-            
+
             result = {
                 'fact_text': fact.get('fact_text', ''),
                 'importance_score': fact.get('importance_score', 0.0),
@@ -154,10 +200,15 @@ class QueryEngine:
                 'paragraph_id': fact.get('paragraph_id', 'unknown'),
                 'source': fact.get('source', {})
             }
-            
+
             results.append(result)
-        
-        logger.info(f"Query returned {len(results)} results")
+
+        logger.info(
+            "Query accepted: best_similarity=%.4f, threshold=%.4f, returned=%d results",
+            best_similarity,
+            self.relevance_threshold,
+            len(results),
+        )
         return results
     
     def get_source_text(
@@ -204,20 +255,67 @@ class QueryEngine:
         
         return None
     
+    def get_last_debug_info(self) -> Dict[str, Any]:
+        """Return the last query decision debug metadata."""
+        return self.last_query_debug.copy()
+
     def get_metadata(self) -> Dict[str, Any]:
         """
         Get document metadata from compressed data.
-        
+
         Returns:
             Metadata dictionary
         """
         return self.compressed_data.get('metadata', {})
-    
+
     def get_compression_stats(self) -> Dict[str, Any]:
         """
         Get compression statistics.
-        
+
         Returns:
             Compression statistics dictionary
         """
         return self.compressed_data.get('compression_stats', {})
+
+    def evaluate_queries(self, query_sets: Dict[str, List[str]]) -> Dict[str, Any]:
+        """Evaluate a set of in-domain and out-of-domain queries and return summary stats."""
+        report = {
+            'total_in_domain': 0,
+            'correct_in_domain': 0,
+            'total_out_of_domain': 0,
+            'correct_out_of_domain': 0,
+            'false_positive_retrievals': 0,
+            'details': []
+        }
+
+        for label, queries in query_sets.items():
+            for query in queries:
+                results = self.query(query, top_k=5)
+                debug = self.get_last_debug_info()
+                status = debug.get('status', 'OUT_OF_DOMAIN')
+                best_similarity = debug.get('best_similarity', 0.0)
+                accepted = bool(results)
+                is_in_domain = label == 'in_domain'
+
+                if is_in_domain:
+                    report['total_in_domain'] += 1
+                    if accepted and status == 'RELEVANT':
+                        report['correct_in_domain'] += 1
+                else:
+                    report['total_out_of_domain'] += 1
+                    if not accepted and status == 'OUT_OF_DOMAIN':
+                        report['correct_out_of_domain'] += 1
+                    elif accepted and status == 'RELEVANT':
+                        report['false_positive_retrievals'] += 1
+
+                report['details'].append({
+                    'query': query,
+                    'label': label,
+                    'status': status,
+                    'best_similarity': round(best_similarity, 4),
+                    'accepted': accepted,
+                    'relevance_threshold': self.relevance_threshold,
+                    'result_count': len(results),
+                })
+
+        return report

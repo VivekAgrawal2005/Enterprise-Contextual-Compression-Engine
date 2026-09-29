@@ -244,18 +244,25 @@ def main():
                 # Execute query
                 print(f"\nSearching for: '{query}'...")
                 results = engine.query(query, top_k=5)
-                
+                debug = engine.get_last_debug_info()
+
                 if not results:
-                    print("No matching facts found.")
+                    print("\nNo sufficiently relevant information was found in the indexed documents.")
+                    print("This system answers questions only from the information contained in the indexed document corpus.")
+                    print(f"Best similarity score: {debug.get('best_similarity', 0.0):.4f}")
+                    print(f"Relevance threshold: {debug.get('relevance_threshold', 0.0):.4f}")
+                    print(f"Status: {debug.get('status', 'OUT_OF_DOMAIN')}")
                     continue
-                
-                # Display results
+
                 print(f"\nFound {len(results)} matching fact(s):")
                 print_separator()
-                
+                print(f"Best similarity score: {debug.get('best_similarity', 0.0):.4f}")
+                print(f"Relevance threshold: {debug.get('relevance_threshold', 0.0):.4f}")
+                print(f"Status: {debug.get('status', 'RELEVANT')}")
+
                 for i, fact in enumerate(results, 1):
                     display_fact(fact, index=i)
-                
+
                 print_separator()
                 
                 # Offer drill-down
