@@ -1,5 +1,9 @@
 # Python cache
 __pycache__/
+.next/
+runtime/
+node_modules/
+.env*.local
 *.pyc
 *.pyo
 *.pyd
