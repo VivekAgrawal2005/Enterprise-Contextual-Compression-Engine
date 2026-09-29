@@ -1,10 +1,16 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from typing import Annotated
+
+from fastapi import APIRouter, File, HTTPException, UploadFile
+
 from ..services.document_service import corpus
 
 router = APIRouter()
 
+
 @router.post('/documents/upload')
-def upload_documents(files: list[UploadFile] = File(...)):
+def upload_documents(
+    files: Annotated[list[UploadFile], File(description='PDF, TXT, or DOCX documents')],
+):
     try:
         return {'documents': corpus.add_files(files)}
     except ValueError as exc:
