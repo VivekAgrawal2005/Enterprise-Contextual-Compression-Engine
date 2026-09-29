@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Activity, AlertCircle, ArrowUpRight, BarChart3, CheckCircle2, ChevronRight, CircleHelp, FileText, FolderOpen, LayoutDashboard, Menu, MessageSquare, Search, Settings, ShieldCheck, UploadCloud, X } from 'lucide-react'
 
-const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+const API = (process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
 type Doc = { document_id:string; filename:string; file_type:string; file_size:number; status:string; facts_extracted?:number; retained_facts?:number; compression_stats?:Record<string,number>; error?:string }
 type Result = { fact_text:string; fact_type:string; similarity_score:number; importance_score:number; confidence_score:number; document_id:string; section_id:string; source?:{trace_id?:string} }
 
