@@ -45,9 +45,10 @@ class CorpusService:
                 facts = result.get('compressed_facts', [])
                 all_facts.extend(facts)
                 doc['status'] = 'Completed'
-                doc['facts_extracted'] = result.get('compression_stats', {}).get('total_facts', len(facts))
-                doc['retained_facts'] = len(facts)
-                doc['compression_stats'] = result.get('compression_stats', {})
+                stats = result.get('metadata', {}).get('compression_stats', result.get('compression_stats', {}))
+                doc['facts_extracted'] = stats.get('total_facts', len(facts))
+                doc['retained_facts'] = stats.get('selected_facts', len(facts))
+                doc['compression_stats'] = stats
                 self.structures[doc['document_id']] = engine.drilldown
             except Exception as exc:
                 doc['status'] = 'Failed'
