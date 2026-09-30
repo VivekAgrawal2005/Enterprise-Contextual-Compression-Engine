@@ -1,3 +1,4 @@
+import hashlib
 import json
 import shutil
 import uuid
@@ -11,6 +12,19 @@ UPLOADS.mkdir(parents=True, exist_ok=True)
 ARTIFACTS.mkdir(parents=True, exist_ok=True)
 
 class CorpusService:
+    @staticmethod
+    def trace_id_for_fact(fact: dict[str, Any]) -> str:
+        existing = fact.get('trace_id') or fact.get('source', {}).get('trace_id')
+        if existing:
+            return str(existing)
+
+        source = fact.get('source') or {}
+        document_id = fact.get('document_id') or source.get('document_id') or 'unknown'
+        section_id = fact.get('section_id') or source.get('section_id') or 'unknown'
+        paragraph_id = fact.get('paragraph_id') or source.get('paragraph_id') or 'unknown'
+        identity = '\x1f'.join((str(document_id), str(section_id), str(paragraph_id)))
+        return hashlib.sha256(identity.encode('utf-8')).hexdigest()
+
     def __init__(self):
         self.documents: dict[str, dict[str, Any]] = {}
         self.facts: list[dict[str, Any]] = []
@@ -62,9 +76,13 @@ class CorpusService:
 
     def get_source(self, trace_id: str):
         for fact in self.facts:
-            if fact.get('trace_id') == trace_id or fact.get('source', {}).get('trace_id') == trace_id:
+            if self.trace_id_for_fact(fact) == trace_id:
                 if self.query_engine:
-                    return self.query_engine.get_source_text(fact) or {'document_id': fact.get('document_id'), 'paragraph_text': '', 'section_title': fact.get('section_id', 'Unknown')}
+                    return self.query_engine.get_source_text(fact) or {
+                        'document_id': fact.get('document_id'),
+                        'paragraph_text': '',
+                        'section_title': fact.get('section_id', 'Unknown'),
+                    }
         return None
 
 corpus = CorpusService()
