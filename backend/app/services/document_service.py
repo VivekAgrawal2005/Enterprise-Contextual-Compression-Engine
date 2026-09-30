@@ -111,6 +111,13 @@ class CorpusService:
                             'paragraph_text': original_text,
                             'text': original_text,
                         }
+
+                if self.query_engine:
+                    return self.query_engine.get_source_text(fact) or {
+                        'document_id': document_id,
+                        'paragraph_text': '',
+                        'section_title': section_id or 'Unknown Section',
+                    }
         return None
 
 corpus = CorpusService()
