@@ -1,22 +1,1080 @@
-'use client'
-import { useEffect, useMemo, useState } from 'react'
-import { Activity, AlertCircle, ArrowUpRight, BarChart3, CheckCircle2, ChevronRight, CircleHelp, FileText, FolderOpen, LayoutDashboard, Menu, MessageSquare, Search, Settings, ShieldCheck, UploadCloud, X } from 'lucide-react'
+"use client";
+import { useEffect, useMemo, useState } from "react";
+import {
+  Activity,
+  AlertCircle,
+  ArrowUpRight,
+  BarChart3,
+  CheckCircle2,
+  ChevronRight,
+  CircleHelp,
+  FileText,
+  FolderOpen,
+  LayoutDashboard,
+  Menu,
+  MessageSquare,
+  Search,
+  Settings,
+  ShieldCheck,
+  UploadCloud,
+  X,
+} from "lucide-react";
 
-const API = (process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
-type Doc = { document_id:string; filename:string; file_type:string; file_size:number; status:string; facts_extracted?:number; retained_facts?:number; compression_stats?:Record<string,number>; error?:string }
-type Result = { fact_text:string; fact_type:string; similarity_score:number; importance_score:number; confidence_score:number; document_id:string; section_id:string; source?:{trace_id?:string} }
+const API = (
+  process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"
+).replace(/\/$/, "");
+type Doc = {
+  document_id: string;
+  filename: string;
+  file_type: string;
+  file_size: number;
+  status: string;
+  facts_extracted?: number;
+  retained_facts?: number;
+  compression_stats?: Record<string, number>;
+  error?: string;
+};
+type Result = {
+  fact_text: string;
+  fact_type: string;
+  similarity_score: number;
+  importance_score: number;
+  confidence_score: number;
+  document_id: string;
+  section_id: string;
+  paragraph_id?: string;
+  trace_id?: string;
+  source?: {
+    document_id?: string;
+    section_id?: string;
+    paragraph_id?: string;
+  };
+};
 
-function formatBytes(bytes=0){ if(!bytes)return '0 KB'; return `${(bytes/1024/1024>=1?bytes/1024/1024:bytes/1024).toFixed(1)} ${bytes/1024/1024>=1?'MB':'KB'}` }
-async function requestJson(path:string,init?:RequestInit){const response=await fetch(`${API}${path}`,init);let payload:unknown=null;try{payload=await response.json()}catch{}if(!response.ok){const detail=typeof payload==='object'&&payload&&'detail' in payload?String((payload as {detail?:unknown}).detail):`Request failed (${response.status})`;throw new Error(detail)}return payload as Record<string,any>}
-function apiError(error:unknown){return error instanceof TypeError?'The Python engine is unavailable. Start the backend with `uvicorn backend.app.main:app --reload --port 8000`.':error instanceof Error?error.message:'The request could not be completed.'}
-function Nav({page,setPage}:{page:string;setPage:(p:string)=>void}){ const links=[['overview','Overview',LayoutDashboard],['documents','Documents',FolderOpen],['query','Query Intelligence',MessageSquare],['evaluation','Evaluation',BarChart3],['settings','Settings',Settings]] as const; return <aside className="hidden w-64 shrink-0 border-r border-slate-200 bg-white lg:flex lg:flex-col"><div className="flex h-20 items-center gap-3 border-b border-slate-200 px-7"><div className="flex size-9 items-center justify-center rounded-xl bg-[#102a43] text-white"><ShieldCheck size={19}/></div><div><div className="text-[13px] font-bold tracking-tight text-[#102a43]">EC<span className="text-blue-600">CE</span></div><div className="text-[10px] font-semibold uppercase tracking-[.16em] text-slate-400">Intelligence platform</div></div></div><nav className="flex flex-1 flex-col gap-1 p-4">{links.map(([id,label,Icon])=><button key={id} onClick={()=>setPage(id)} className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition ${page===id?'bg-blue-50 text-blue-700':'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}><Icon size={17}/>{label}</button>)}</nav><div className="m-4 rounded-xl border border-slate-200 bg-slate-50 p-4"><div className="mb-2 flex items-center gap-2 text-xs font-semibold text-slate-700"><Activity size={14} className="text-emerald-600"/> Engine online</div><p className="text-[11px] leading-4 text-slate-500">Local Python inference service connected.</p></div></aside> }
-function Header({page}:{page:string}){return <header className="flex h-20 items-center justify-between border-b border-slate-200 bg-white px-5 sm:px-8"><div className="flex items-center gap-3"><button className="lg:hidden"><Menu size={20}/></button><div><p className="text-xs font-semibold uppercase tracking-[.16em] text-blue-600">Enterprise Contextual Compression Engine</p><h1 className="mt-1 text-xl font-bold tracking-tight text-[#102a43]">{page==='overview'?'Overview':page==='query'?'Query Intelligence':page.charAt(0).toUpperCase()+page.slice(1)}</h1></div></div><div className="hidden items-center gap-3 sm:flex"><div className="flex items-center gap-2 rounded-full border border-slate-200 px-3 py-2 text-xs text-slate-500"><span className="size-2 rounded-full bg-emerald-500"/> Local workspace</div><div className="flex size-9 items-center justify-center rounded-full bg-slate-100 text-sm font-semibold text-slate-600">VA</div></div></header>}
-function Stat({label,value,detail,icon:Icon}:{label:string;value:string|number;detail:string;icon:any}){return <div className="rounded-xl border border-slate-200 bg-white p-5"><div className="flex items-start justify-between"><div className="text-sm font-medium text-slate-500">{label}</div><div className="flex size-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600"><Icon size={16}/></div></div><div className="mt-4 text-3xl font-bold tracking-tight text-[#102a43]">{value}</div><div className="mt-1 text-xs text-slate-400">{detail}</div></div>}
-function Empty({title,body,action}:{title:string;body:string;action?:()=>void}){return <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center"><div className="mb-4 flex size-12 items-center justify-center rounded-full bg-slate-100 text-slate-400"><FileText size={22}/></div><h3 className="font-semibold text-slate-800">{title}</h3><p className="mt-2 max-w-sm text-sm leading-6 text-slate-500">{body}</p>{action&&<button onClick={action} className="mt-5 rounded-lg bg-[#102a43] px-4 py-2 text-sm font-semibold text-white">Upload documents</button>}</div>}
-function Dashboard({docs,setPage}:{docs:Doc[];setPage:(p:string)=>void}){const facts=docs.reduce((n,d)=>n+(d.retained_facts||0),0);return <div className="flex flex-col gap-7"><div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><p className="max-w-xl text-sm leading-6 text-slate-500">Turn complex documents into verified, decision-critical intelligence.</p></div><button onClick={()=>setPage('documents')} className="flex items-center justify-center gap-2 rounded-lg bg-[#102a43] px-4 py-2.5 text-sm font-semibold text-white shadow-sm"><UploadCloud size={16}/> Upload documents</button></div><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><Stat label="Documents indexed" value={docs.length} detail="In this workspace" icon={FolderOpen}/><Stat label="Facts extracted" value={facts} detail="Decision-critical facts" icon={FileText}/><Stat label="Queries processed" value={0} detail="This session" icon={MessageSquare}/><Stat label="Out-of-domain queries" value={0} detail="Reliability gate" icon={ShieldCheck}/></div><div className="grid gap-5 xl:grid-cols-[1.35fr_1fr]"><section className="rounded-xl border border-slate-200 bg-white"><div className="flex items-center justify-between border-b border-slate-200 px-5 py-4"><div><h2 className="font-semibold text-[#102a43]">Recent documents</h2><p className="mt-1 text-xs text-slate-500">Your indexed source material</p></div><button onClick={()=>setPage('documents')} className="flex items-center gap-1 text-xs font-semibold text-blue-600">View all <ChevronRight size={14}/></button></div><div className="p-5">{docs.length?<div className="flex flex-col gap-3">{docs.slice(-4).reverse().map(d=><div key={d.document_id} className="flex items-center justify-between rounded-lg border border-slate-100 p-3"><div className="flex min-w-0 items-center gap-3"><FileText size={17} className="shrink-0 text-blue-600"/><div className="min-w-0"><p className="truncate text-sm font-semibold text-slate-700">{d.filename}</p><p className="text-xs text-slate-400">{d.file_type} · {formatBytes(d.file_size)}</p></div></div><span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">{d.status}</span></div>)}</div>:<Empty title="No documents indexed" body="Upload policy, regulatory, or operational documents to build your first intelligence corpus." action={()=>setPage('documents')}/>}</div></section><section className="rounded-xl border border-slate-200 bg-white"><div className="border-b border-slate-200 px-5 py-4"><h2 className="font-semibold text-[#102a43]">Recent queries</h2><p className="mt-1 text-xs text-slate-500">Semantic retrieval activity</p></div><Empty title="No queries yet" body="Ask a question against your indexed documents to see ranked evidence here." action={()=>setPage('query')}/></section></div></div>}
-function Documents({docs,setDocs}:{docs:Doc[];setDocs:(d:Doc[])=>void}){const [files,setFiles]=useState<File[]>([]);const [busy,setBusy]=useState(false);const [error,setError]=useState('');const upload=async()=>{if(!files.length)return;setBusy(true);setError('');try{const fd=new FormData();files.forEach(f=>fd.append('files',f));const data=await requestJson('/api/documents/upload',{method:'POST',body:fd});setDocs([...docs,...(data.documents||[])]);setFiles([])}catch(error){setError(apiError(error))}finally{setBusy(false)}};const process=async()=>{setBusy(true);setError('');try{const data=await requestJson('/api/documents/process',{method:'POST'});setDocs(data.documents||[])}catch(error){setError(apiError(error))}finally{setBusy(false)}};return <div className="flex flex-col gap-6"><div><p className="max-w-2xl text-sm leading-6 text-slate-500">Build a queryable corpus from source documents. Parsing, extraction, scoring, compression, and traceability run in the Python engine.</p></div><div className="rounded-xl border border-slate-200 bg-white p-5"><label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 px-6 py-14 text-center transition hover:border-blue-400 hover:bg-blue-50/30"><UploadCloud size={30} className="text-blue-600"/><span className="mt-3 font-semibold text-slate-700">Drop files here or browse</span><span className="mt-1 text-xs text-slate-500">PDF, DOCX, and TXT · multiple files supported</span><input type="file" multiple accept=".pdf,.docx,.txt" className="sr-only" onChange={e=>setFiles(Array.from(e.target.files||[]))}/></label>{error&&<div role="alert" className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900">{error}</div>}{files.length>0&&<div className="mt-5 flex flex-col gap-2">{files.map(f=><div key={f.name} className="flex items-center justify-between rounded-lg border border-slate-200 p-3"><div className="flex items-center gap-3"><FileText size={16} className="text-blue-600"/><div><p className="text-sm font-semibold text-slate-700">{f.name}</p><p className="text-xs text-slate-400">{f.type||'Document'} · {formatBytes(f.size)}</p></div></div><button onClick={()=>setFiles(files.filter(x=>x!==f))} className="text-slate-400 hover:text-slate-700"><X size={16}/></button></div>)}</div>}<div className="mt-5 flex flex-wrap justify-end gap-3"><button onClick={upload} disabled={!files.length||busy} className="rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 disabled:opacity-50">{busy?'Uploading…':'Add to corpus'}</button><button onClick={process} disabled={busy||!docs.length} className="rounded-lg bg-[#102a43] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{busy?'Processing…':'Process documents'}</button></div></div><div className="rounded-xl border border-slate-200 bg-white"><div className="border-b border-slate-200 px-5 py-4"><h2 className="font-semibold text-[#102a43]">Corpus documents</h2></div><div className="p-5">{docs.length?<div className="flex flex-col gap-2">{docs.map(d=><div key={d.document_id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-100 p-4"><div className="flex items-center gap-3"><FileText size={18} className="text-blue-600"/><div><p className="text-sm font-semibold text-slate-700">{d.filename}</p><p className="text-xs text-slate-400">{d.file_type} · {formatBytes(d.file_size)} · {d.retained_facts||0} retained facts</p></div></div><span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${d.status==='Completed'?'bg-emerald-50 text-emerald-700':d.status==='Failed'?'bg-red-50 text-red-700':'bg-amber-50 text-amber-700'}`}>{d.status}</span></div>)}</div>:<Empty title="Corpus is empty" body="Add one or more source documents above to begin."/>}</div></div></div>}
-function SourceDrawer({result,onClose}:{result:Result;onClose:()=>void}){const [source,setSource]=useState<Record<string,any>|null>(null);const [loading,setLoading]=useState(Boolean(result));const [error,setError]=useState('');const load=async()=>{if(!result?.source?.trace_id){setLoading(false);return}setLoading(true);setError('');try{setSource(await requestJson(`/api/facts/${encodeURIComponent(result.source?.trace_id)}/source`))}catch(error){setError(apiError(error))}finally{setLoading(false)}};const trace=result.source?.trace_id;useEffect(()=>{load()},[trace]);if(!result)return null;const value=(...keys:string[])=>keys.map(key=>source?.[key]).find(value=>value!==undefined&&value!==null&&value!=='');return <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/30" role="dialog" aria-modal="true" aria-labelledby="source-drawer-title"><button aria-label="Close source trace" className="absolute inset-0 cursor-default" onClick={onClose}/><aside className="relative flex h-full w-full max-w-xl flex-col overflow-y-auto bg-white shadow-2xl"><div className="flex items-center justify-between border-b border-slate-200 px-6 py-5"><div><p className="text-[11px] font-semibold uppercase tracking-[.16em] text-blue-600">Source traceability</p><h2 id="source-drawer-title" className="mt-1 text-lg font-bold text-[#102a43]">Evidence drill-down</h2></div><button aria-label="Close source trace" onClick={onClose} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"><X size={18}/></button></div><div className="flex flex-col gap-6 p-6"><section><p className="text-[11px] font-semibold uppercase tracking-[.16em] text-slate-400">Compressed fact</p><p className="mt-2 rounded-lg border border-blue-100 bg-blue-50 p-4 text-sm font-semibold leading-6 text-[#102a43]">{result.fact_text}</p></section>{loading?<div className="flex items-center gap-3 rounded-lg border border-slate-200 p-4 text-sm text-slate-500"><span className="size-4 animate-spin rounded-full border-2 border-slate-300 border-t-blue-600"/>Loading source evidence...</div>:error?<div role="alert" className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><p className="font-semibold">Unable to retrieve source evidence.</p><p className="mt-1">Please try again.</p><button onClick={load} className="mt-3 rounded-lg bg-[#102a43] px-3 py-2 text-xs font-semibold text-white">Retry</button></div>:!trace?<div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">Source trace unavailable for this result.</div>:<><section><p className="text-[11px] font-semibold uppercase tracking-[.16em] text-slate-400">Traceability chain</p><div className="mt-3 flex flex-col gap-2">{[['Document',value('filename','document_name','document_id')||result.document_id],['Section',value('section_id','section')||result.section_id],['Paragraph',value('paragraph_id','paragraph')]].map(([label,item],index)=><div key={label} className="flex items-center gap-3"><div className="flex min-w-0 flex-1 items-center justify-between rounded-lg border border-slate-200 px-4 py-3"><span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{label}</span><span className="truncate pl-4 text-right text-sm font-medium text-slate-700">{item||'Not provided'}</span></div>{index<2&&<ChevronRight className="rotate-90 text-slate-300" size={15}/>}</div>)}</div></section><section><p className="text-[11px] font-semibold uppercase tracking-[.16em] text-slate-400">Original evidence</p><blockquote className="mt-3 border-l-4 border-blue-500 bg-slate-50 p-4 text-sm leading-7 text-slate-700">{value('source_text','excerpt','evidence','text')||'Source text not provided by the traceability service.'}</blockquote></section><section><p className="text-[11px] font-semibold uppercase tracking-[.16em] text-slate-400">Scoring</p><div className="mt-3 grid grid-cols-2 gap-3">{[['Importance',result.importance_score],['Confidence',result.confidence_score],['Combined',value('combined_score')],['Similarity',result.similarity_score]].filter(([,score])=>score!==undefined&&score!==null).map(([label,score])=><div key={String(label)} className="rounded-lg border border-slate-200 p-3"><p className="text-xs text-slate-400">{label}</p><p className="mt-1 font-mono text-sm font-semibold text-[#102a43]">{typeof score==='number'?score.toFixed(3):String(score)}</p></div>)}</div></section></>}</div></aside></div>}
-function Query(){const [text,setText]=useState('');const [data,setData]=useState<any>(null);const [busy,setBusy]=useState(false);const [error,setError]=useState('');const [selected,setSelected]=useState<Result|null>(null);const submit=async()=>{if(!text.trim())return;setBusy(true);setError('');try{setData(await requestJson('/api/query',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query:text,top_k:5})}))}catch(error){setError(apiError(error))}finally{setBusy(false)}};const results=(data?.results||data?.facts||data?.evidence||[]) as Result[];return <div className="flex flex-col gap-6"><div><p className="text-sm leading-6 text-slate-500">Ask questions about your indexed documents. Every answer is returned as ranked evidence, never generated prose.</p></div><div className="rounded-xl border border-slate-200 bg-white p-5"><div className="flex flex-col gap-3 sm:flex-row"><div className="relative flex-1"><Search size={17} className="absolute left-3 top-3.5 text-slate-400"/><input value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.nativeEvent.isComposing&&e.keyCode!==229)submit()}} placeholder="What is the daily withdrawal limit?" className="w-full rounded-lg border border-slate-300 py-3 pl-10 pr-4 text-sm outline-none ring-blue-500 transition focus:ring-2"/></div><button onClick={submit} disabled={busy||!text.trim()} className="rounded-lg bg-[#102a43] px-5 py-3 text-sm font-semibold text-white disabled:opacity-50">{busy?'Searching…':'Search evidence'}</button></div><div className="mt-3 flex flex-wrap gap-2"><span className="text-xs text-slate-400">Try:</span>{['What are the key limits?','Which clauses require approval?'].map(q=><button key={q} onClick={()=>setText(q)} className="text-xs font-medium text-blue-600 hover:underline">{q}</button>)}</div></div>{error&&<div role="alert" className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900">{error}</div>}{data?.status==='OUT_OF_DOMAIN'?<div className="rounded-xl border border-amber-200 bg-amber-50 p-6"><div className="flex gap-3"><AlertCircle className="shrink-0 text-amber-600" size={20}/><div><h2 className="font-semibold text-amber-900">Query outside indexed domain</h2><p className="mt-1 text-sm leading-6 text-amber-800">{data.message||'This query is outside the indexed document domain.'}</p></div></div></div>:results.length>0?<div className="flex flex-col gap-4">{results.map((result,index)=><article key={result.source?.trace_id||`${result.document_id}-${result.section_id}-${index}`} className="rounded-xl border border-slate-200 bg-white p-5"><div className="flex items-start justify-between gap-4"><div><p className="text-[11px] font-semibold uppercase tracking-[.16em] text-blue-600">Evidence {String(index+1).padStart(2,'0')}</p><p className="mt-2 text-base font-semibold leading-7 text-[#102a43]">{result.fact_text}</p></div><button onClick={()=>result.source?.trace_id?setSelected(result):undefined} disabled={!result.source?.trace_id} className="shrink-0 rounded-lg border border-blue-200 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400">{result.source?.trace_id?'Drill Down':'Trace unavailable'}</button></div><div className="mt-4 flex flex-wrap gap-4 text-xs text-slate-500"><span>Importance <b className="font-mono text-slate-700">{result.importance_score?.toFixed(3)}</b></span><span>Confidence <b className="font-mono text-slate-700">{result.confidence_score?.toFixed(3)}</b></span><span>Similarity <b className="font-mono text-slate-700">{result.similarity_score?.toFixed(3)}</b></span></div></article>)}</div>:data?<div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">No matching evidence was returned.</div>:null}{selected&&<SourceDrawer result={selected} onClose={()=>setSelected(null)}/> }</div>}
-function LegacyQuery(){const [text,setText]=useState('');const [data,setData]=useState<any>(null);const [busy,setBusy]=useState(false);const [error,setError]=useState('');const submit=async()=>{if(!text.trim())return;setBusy(true);setError('');try{setData(await requestJson('/api/query',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query:text,top_k:5})}))}catch(error){setError(apiError(error))}finally{setBusy(false)}};return <div className="flex flex-col gap-6"><div><p className="text-sm leading-6 text-slate-500">Ask questions about your indexed documents. Every answer is returned as ranked evidence, never generated prose.</p></div><div className="rounded-xl border border-slate-200 bg-white p-5"><div className="flex flex-col gap-3 sm:flex-row"><div className="relative flex-1"><Search size={17} className="absolute left-3 top-3.5 text-slate-400"/><input value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.nativeEvent.isComposing&&e.keyCode!==229)submit()}} placeholder="What is the daily withdrawal limit?" className="w-full rounded-lg border border-slate-300 py-3 pl-10 pr-4 text-sm outline-none ring-blue-500 transition focus:ring-2"/></div><button onClick={submit} disabled={busy||!text.trim()} className="rounded-lg bg-[#102a43] px-5 py-3 text-sm font-semibold text-white disabled:opacity-50">{busy?'Searching…':'Search evidence'}</button></div><div className="mt-3 flex flex-wrap gap-2"><span className="text-xs text-slate-400">Try:</span>{['What are the key limits?','Which clauses require approval?'].map(q=><button key={q} onClick={()=>setText(q)} className="text-xs font-medium text-blue-600 hover:underline">{q}</button>)}</div></div>{error&&<div role="alert" className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900">{error}</div>}{data?.status==='OUT_OF_DOMAIN'?<div className="rounded-xl border border-amber-200 bg-amber-50 p-6"><div className="flex gap-3"><AlertCircle className="shrink-0 text-amber-600" size={20}/><div><h2 className="font-semibold text-amber-950">No relevant information found</h2><p className="mt-1 text-sm leading-6 text-amber-900/70">This question appears to be outside the scope of your indexed documents.</p><div className="mt-5 grid gap-3 text-sm sm:grid-cols-3"><div><div className="text-xs text-amber-900/60">Best similarity</div><div className="mt-1 font-bold text-amber-950">{Number(data.best_similarity).toFixed(4)}</div></div><div><div className="text-xs text-amber-900/60">Required threshold</div><div className="mt-1 font-bold text-amber-950">{Number(data.threshold).toFixed(4)}</div></div><div><div className="text-xs text-amber-900/60">Relevant facts</div><div className="mt-1 font-bold text-amber-950">0</div></div></div></div></div></div>:data?.status==='EMPTY_CORPUS'?<Empty title="No indexed corpus" body="Process documents before searching the intelligence layer."/>:data?.results?.length?<div className="flex flex-col gap-3">{data.results.map((r:Result,i:number)=><div key={`${r.document_id}-${i}`} className="rounded-xl border border-slate-200 bg-white p-5"><div className="flex items-start justify-between gap-4"><div className="flex items-center gap-2"><span className="rounded bg-blue-50 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-blue-700">{r.fact_type}</span><span className="text-xs text-slate-400">Evidence {String(i+1).padStart(2,'0')}</span></div><span className="text-sm font-bold text-[#102a43]">{(r.similarity_score*100).toFixed(1)}%</span></div><p className="mt-4 text-[15px] leading-7 text-slate-700">{r.fact_text}</p><div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 border-t border-slate-100 pt-3 text-xs text-slate-500"><span>Importance <b className="text-slate-700">{Number(r.importance_score).toFixed(3)}</b></span><span>Confidence <b className="text-slate-700">{Number(r.confidence_score).toFixed(3)}</b></span><span>Source <b className="text-slate-700">{r.document_id}</b></span><span>Section <b className="text-slate-700">{r.section_id}</b></span></div></div>)}</div>:data?<Empty title="No evidence returned" body="Try a more specific question about your indexed documents."/>:null}</div>}
-function Placeholder({title,body}:{title:string;body:string}){return <Empty title={title} body={body}/>}
-export default function Home(){const [page,setPage]=useState('overview');const [docs,setDocs]=useState<Doc[]>([]);useEffect(()=>{requestJson('/api/documents').then(data=>setDocs(data.documents||[])).catch(()=>{})},[]);const content=useMemo(()=>page==='documents'?<Documents docs={docs} setDocs={setDocs}/>:page==='query'?<Query/>:page==='evaluation'?<Placeholder title="Evaluation workspace" body="Evaluation metrics will appear here once labeled query sets are connected. No metrics are fabricated."/>:page==='settings'?<Placeholder title="Workspace settings" body="Configure the local Python service, scoring thresholds, and future persistence integrations here."/>:<Dashboard docs={docs} setPage={setPage}/>,[page,docs]);return <div className="flex min-h-screen bg-[#f7f8fa]"><Nav page={page} setPage={setPage}/><main className="min-w-0 flex-1"><Header page={page}/><div className="mx-auto max-w-[1440px] p-5 sm:p-8">{content}</div></main></div>}
+function formatBytes(bytes = 0) {
+  if (!bytes) return "0 KB";
+  return `${(bytes / 1024 / 1024 >= 1 ? bytes / 1024 / 1024 : bytes / 1024).toFixed(1)} ${bytes / 1024 / 1024 >= 1 ? "MB" : "KB"}`;
+}
+async function requestJson(path: string, init?: RequestInit) {
+  const response = await fetch(`${API}${path}`, init);
+  let payload: unknown = null;
+  try {
+    payload = await response.json();
+  } catch {}
+  if (!response.ok) {
+    const detail =
+      typeof payload === "object" && payload && "detail" in payload
+        ? String((payload as { detail?: unknown }).detail)
+        : `Request failed (${response.status})`;
+    throw new Error(detail);
+  }
+  return payload as Record<string, any>;
+}
+function apiError(error: unknown) {
+  return error instanceof TypeError
+    ? "The Python engine is unavailable. Start the backend with `uvicorn backend.app.main:app --reload --port 8000`."
+    : error instanceof Error
+      ? error.message
+      : "The request could not be completed.";
+}
+function Nav({
+  page,
+  setPage,
+}: {
+  page: string;
+  setPage: (p: string) => void;
+}) {
+  const links = [
+    ["overview", "Overview", LayoutDashboard],
+    ["documents", "Documents", FolderOpen],
+    ["query", "Query Intelligence", MessageSquare],
+    ["evaluation", "Evaluation", BarChart3],
+    ["settings", "Settings", Settings],
+  ] as const;
+  return (
+    <aside className="hidden w-64 shrink-0 border-r border-slate-200 bg-white lg:flex lg:flex-col">
+      <div className="flex h-20 items-center gap-3 border-b border-slate-200 px-7">
+        <div className="flex size-9 items-center justify-center rounded-xl bg-[#102a43] text-white">
+          <ShieldCheck size={19} />
+        </div>
+        <div>
+          <div className="text-[13px] font-bold tracking-tight text-[#102a43]">
+            EC<span className="text-blue-600">CE</span>
+          </div>
+          <div className="text-[10px] font-semibold uppercase tracking-[.16em] text-slate-400">
+            Intelligence platform
+          </div>
+        </div>
+      </div>
+      <nav className="flex flex-1 flex-col gap-1 p-4">
+        {links.map(([id, label, Icon]) => (
+          <button
+            key={id}
+            onClick={() => setPage(id)}
+            className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition ${page === id ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}
+          >
+            <Icon size={17} />
+            {label}
+          </button>
+        ))}
+      </nav>
+      <div className="m-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+        <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-slate-700">
+          <Activity size={14} className="text-emerald-600" /> Engine online
+        </div>
+        <p className="text-[11px] leading-4 text-slate-500">
+          Local Python inference service connected.
+        </p>
+      </div>
+    </aside>
+  );
+}
+function Header({ page }: { page: string }) {
+  return (
+    <header className="flex h-20 items-center justify-between border-b border-slate-200 bg-white px-5 sm:px-8">
+      <div className="flex items-center gap-3">
+        <button className="lg:hidden">
+          <Menu size={20} />
+        </button>
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[.16em] text-blue-600">
+            Enterprise Contextual Compression Engine
+          </p>
+          <h1 className="mt-1 text-xl font-bold tracking-tight text-[#102a43]">
+            {page === "overview"
+              ? "Overview"
+              : page === "query"
+                ? "Query Intelligence"
+                : page.charAt(0).toUpperCase() + page.slice(1)}
+          </h1>
+        </div>
+      </div>
+      <div className="hidden items-center gap-3 sm:flex">
+        <div className="flex items-center gap-2 rounded-full border border-slate-200 px-3 py-2 text-xs text-slate-500">
+          <span className="size-2 rounded-full bg-emerald-500" /> Local
+          workspace
+        </div>
+        <div className="flex size-9 items-center justify-center rounded-full bg-slate-100 text-sm font-semibold text-slate-600">
+          VA
+        </div>
+      </div>
+    </header>
+  );
+}
+function Stat({
+  label,
+  value,
+  detail,
+  icon: Icon,
+}: {
+  label: string;
+  value: string | number;
+  detail: string;
+  icon: any;
+}) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-5">
+      <div className="flex items-start justify-between">
+        <div className="text-sm font-medium text-slate-500">{label}</div>
+        <div className="flex size-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+          <Icon size={16} />
+        </div>
+      </div>
+      <div className="mt-4 text-3xl font-bold tracking-tight text-[#102a43]">
+        {value}
+      </div>
+      <div className="mt-1 text-xs text-slate-400">{detail}</div>
+    </div>
+  );
+}
+function Empty({
+  title,
+  body,
+  action,
+}: {
+  title: string;
+  body: string;
+  action?: () => void;
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center">
+      <div className="mb-4 flex size-12 items-center justify-center rounded-full bg-slate-100 text-slate-400">
+        <FileText size={22} />
+      </div>
+      <h3 className="font-semibold text-slate-800">{title}</h3>
+      <p className="mt-2 max-w-sm text-sm leading-6 text-slate-500">{body}</p>
+      {action && (
+        <button
+          onClick={action}
+          className="mt-5 rounded-lg bg-[#102a43] px-4 py-2 text-sm font-semibold text-white"
+        >
+          Upload documents
+        </button>
+      )}
+    </div>
+  );
+}
+function Dashboard({
+  docs,
+  setPage,
+}: {
+  docs: Doc[];
+  setPage: (p: string) => void;
+}) {
+  const facts = docs.reduce((n, d) => n + (d.retained_facts || 0), 0);
+  return (
+    <div className="flex flex-col gap-7">
+      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+        <div>
+          <p className="max-w-xl text-sm leading-6 text-slate-500">
+            Turn complex documents into verified, decision-critical
+            intelligence.
+          </p>
+        </div>
+        <button
+          onClick={() => setPage("documents")}
+          className="flex items-center justify-center gap-2 rounded-lg bg-[#102a43] px-4 py-2.5 text-sm font-semibold text-white shadow-sm"
+        >
+          <UploadCloud size={16} /> Upload documents
+        </button>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <Stat
+          label="Documents indexed"
+          value={docs.length}
+          detail="In this workspace"
+          icon={FolderOpen}
+        />
+        <Stat
+          label="Facts extracted"
+          value={facts}
+          detail="Decision-critical facts"
+          icon={FileText}
+        />
+        <Stat
+          label="Queries processed"
+          value={0}
+          detail="This session"
+          icon={MessageSquare}
+        />
+        <Stat
+          label="Out-of-domain queries"
+          value={0}
+          detail="Reliability gate"
+          icon={ShieldCheck}
+        />
+      </div>
+      <div className="grid gap-5 xl:grid-cols-[1.35fr_1fr]">
+        <section className="rounded-xl border border-slate-200 bg-white">
+          <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+            <div>
+              <h2 className="font-semibold text-[#102a43]">Recent documents</h2>
+              <p className="mt-1 text-xs text-slate-500">
+                Your indexed source material
+              </p>
+            </div>
+            <button
+              onClick={() => setPage("documents")}
+              className="flex items-center gap-1 text-xs font-semibold text-blue-600"
+            >
+              View all <ChevronRight size={14} />
+            </button>
+          </div>
+          <div className="p-5">
+            {docs.length ? (
+              <div className="flex flex-col gap-3">
+                {docs
+                  .slice(-4)
+                  .reverse()
+                  .map((d) => (
+                    <div
+                      key={d.document_id}
+                      className="flex items-center justify-between rounded-lg border border-slate-100 p-3"
+                    >
+                      <div className="flex min-w-0 items-center gap-3">
+                        <FileText
+                          size={17}
+                          className="shrink-0 text-blue-600"
+                        />
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-slate-700">
+                            {d.filename}
+                          </p>
+                          <p className="text-xs text-slate-400">
+                            {d.file_type} · {formatBytes(d.file_size)}
+                          </p>
+                        </div>
+                      </div>
+                      <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
+                        {d.status}
+                      </span>
+                    </div>
+                  ))}
+              </div>
+            ) : (
+              <Empty
+                title="No documents indexed"
+                body="Upload policy, regulatory, or operational documents to build your first intelligence corpus."
+                action={() => setPage("documents")}
+              />
+            )}
+          </div>
+        </section>
+        <section className="rounded-xl border border-slate-200 bg-white">
+          <div className="border-b border-slate-200 px-5 py-4">
+            <h2 className="font-semibold text-[#102a43]">Recent queries</h2>
+            <p className="mt-1 text-xs text-slate-500">
+              Semantic retrieval activity
+            </p>
+          </div>
+          <Empty
+            title="No queries yet"
+            body="Ask a question against your indexed documents to see ranked evidence here."
+            action={() => setPage("query")}
+          />
+        </section>
+      </div>
+    </div>
+  );
+}
+function Documents({
+  docs,
+  setDocs,
+}: {
+  docs: Doc[];
+  setDocs: (d: Doc[]) => void;
+}) {
+  const [files, setFiles] = useState<File[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const upload = async () => {
+    if (!files.length) return;
+    setBusy(true);
+    setError("");
+    try {
+      const fd = new FormData();
+      files.forEach((f) => fd.append("files", f));
+      const data = await requestJson("/api/documents/upload", {
+        method: "POST",
+        body: fd,
+      });
+      setDocs([...docs, ...(data.documents || [])]);
+      setFiles([]);
+    } catch (error) {
+      setError(apiError(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const process = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      const data = await requestJson("/api/documents/process", {
+        method: "POST",
+      });
+      setDocs(data.documents || []);
+    } catch (error) {
+      setError(apiError(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="flex flex-col gap-6">
+      <div>
+        <p className="max-w-2xl text-sm leading-6 text-slate-500">
+          Build a queryable corpus from source documents. Parsing, extraction,
+          scoring, compression, and traceability run in the Python engine.
+        </p>
+      </div>
+      <div className="rounded-xl border border-slate-200 bg-white p-5">
+        <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 px-6 py-14 text-center transition hover:border-blue-400 hover:bg-blue-50/30">
+          <UploadCloud size={30} className="text-blue-600" />
+          <span className="mt-3 font-semibold text-slate-700">
+            Drop files here or browse
+          </span>
+          <span className="mt-1 text-xs text-slate-500">
+            PDF, DOCX, and TXT · multiple files supported
+          </span>
+          <input
+            type="file"
+            multiple
+            accept=".pdf,.docx,.txt"
+            className="sr-only"
+            onChange={(e) => setFiles(Array.from(e.target.files || []))}
+          />
+        </label>
+        {error && (
+          <div
+            role="alert"
+            className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900"
+          >
+            {error}
+          </div>
+        )}
+        {files.length > 0 && (
+          <div className="mt-5 flex flex-col gap-2">
+            {files.map((f) => (
+              <div
+                key={f.name}
+                className="flex items-center justify-between rounded-lg border border-slate-200 p-3"
+              >
+                <div className="flex items-center gap-3">
+                  <FileText size={16} className="text-blue-600" />
+                  <div>
+                    <p className="text-sm font-semibold text-slate-700">
+                      {f.name}
+                    </p>
+                    <p className="text-xs text-slate-400">
+                      {f.type || "Document"} · {formatBytes(f.size)}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setFiles(files.filter((x) => x !== f))}
+                  className="text-slate-400 hover:text-slate-700"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="mt-5 flex flex-wrap justify-end gap-3">
+          <button
+            onClick={upload}
+            disabled={!files.length || busy}
+            className="rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 disabled:opacity-50"
+          >
+            {busy ? "Uploading…" : "Add to corpus"}
+          </button>
+          <button
+            onClick={process}
+            disabled={busy || !docs.length}
+            className="rounded-lg bg-[#102a43] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            {busy ? "Processing…" : "Process documents"}
+          </button>
+        </div>
+      </div>
+      <div className="rounded-xl border border-slate-200 bg-white">
+        <div className="border-b border-slate-200 px-5 py-4">
+          <h2 className="font-semibold text-[#102a43]">Corpus documents</h2>
+        </div>
+        <div className="p-5">
+          {docs.length ? (
+            <div className="flex flex-col gap-2">
+              {docs.map((d) => (
+                <div
+                  key={d.document_id}
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-100 p-4"
+                >
+                  <div className="flex items-center gap-3">
+                    <FileText size={18} className="text-blue-600" />
+                    <div>
+                      <p className="text-sm font-semibold text-slate-700">
+                        {d.filename}
+                      </p>
+                      <p className="text-xs text-slate-400">
+                        {d.file_type} · {formatBytes(d.file_size)} ·{" "}
+                        {d.retained_facts || 0} retained facts
+                      </p>
+                    </div>
+                  </div>
+                  <span
+                    className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${d.status === "Completed" ? "bg-emerald-50 text-emerald-700" : d.status === "Failed" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"}`}
+                  >
+                    {d.status}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <Empty
+              title="Corpus is empty"
+              body="Add one or more source documents above to begin."
+            />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+function SourceDrawer({
+  result,
+  onClose,
+}: {
+  result: Result;
+  onClose: () => void;
+}) {
+  const [source, setSource] = useState<Record<string, any> | null>(null);
+  const [loading, setLoading] = useState(Boolean(result));
+  const [error, setError] = useState("");
+  const trace = result.trace_id;
+  const load = async (traceId = trace) => {
+    if (!traceId) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError("");
+    try {
+      setSource(
+        await requestJson(
+          `/api/facts/${encodeURIComponent(traceId)}/source`,
+        ),
+      );
+    } catch (error) {
+      setError(apiError(error));
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => {
+    load(trace);
+  }, [trace]);
+  if (!result) return null;
+  const value = (...keys: string[]) =>
+    keys
+      .map((key) => source?.[key])
+      .find((value) => value !== undefined && value !== null && value !== "");
+  return (
+    <div
+      className="fixed inset-0 z-50 flex justify-end bg-slate-950/30"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="source-drawer-title"
+    >
+      <button
+        aria-label="Close source trace"
+        className="absolute inset-0 cursor-default"
+        onClick={onClose}
+      />
+      <aside className="relative flex h-full w-full max-w-xl flex-col overflow-y-auto bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[.16em] text-blue-600">
+              Source traceability
+            </p>
+            <h2
+              id="source-drawer-title"
+              className="mt-1 text-lg font-bold text-[#102a43]"
+            >
+              Evidence drill-down
+            </h2>
+          </div>
+          <button
+            aria-label="Close source trace"
+            onClick={onClose}
+            className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"
+          >
+            <X size={18} />
+          </button>
+        </div>
+        <div className="flex flex-col gap-6 p-6">
+          <section>
+            <p className="text-[11px] font-semibold uppercase tracking-[.16em] text-slate-400">
+              Compressed fact
+            </p>
+            <p className="mt-2 rounded-lg border border-blue-100 bg-blue-50 p-4 text-sm font-semibold leading-6 text-[#102a43]">
+              {result.fact_text}
+            </p>
+          </section>
+          {loading ? (
+            <div className="flex items-center gap-3 rounded-lg border border-slate-200 p-4 text-sm text-slate-500">
+              <span className="size-4 animate-spin rounded-full border-2 border-slate-300 border-t-blue-600" />
+              Loading source evidence...
+            </div>
+          ) : error ? (
+            <div
+              role="alert"
+              className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"
+            >
+              <p className="font-semibold">
+                Unable to retrieve source evidence.
+              </p>
+              <p className="mt-1">Please try again.</p>
+              <button
+                onClick={() => load()}
+                className="mt-3 rounded-lg bg-[#102a43] px-3 py-2 text-xs font-semibold text-white"
+              >
+                Retry
+              </button>
+            </div>
+          ) : !trace ? (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+              Source trace unavailable for this result.
+            </div>
+          ) : (
+            <>
+              <section>
+                <p className="text-[11px] font-semibold uppercase tracking-[.16em] text-slate-400">
+                  Traceability chain
+                </p>
+                <div className="mt-3 flex flex-col gap-2">
+                  {[
+                    [
+                      "Document",
+                      value("filename", "document_name", "document_id") ||
+                        result.document_id,
+                    ],
+                    [
+                      "Section",
+                      value("section_id", "section") || result.section_id,
+                    ],
+                    ["Paragraph", value("paragraph_id", "paragraph")],
+                  ].map(([label, item], index) => (
+                    <div key={label} className="flex items-center gap-3">
+                      <div className="flex min-w-0 flex-1 items-center justify-between rounded-lg border border-slate-200 px-4 py-3">
+                        <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                          {label}
+                        </span>
+                        <span className="truncate pl-4 text-right text-sm font-medium text-slate-700">
+                          {item || "Not provided"}
+                        </span>
+                      </div>
+                      {index < 2 && (
+                        <ChevronRight
+                          className="rotate-90 text-slate-300"
+                          size={15}
+                        />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </section>
+              <section>
+                <p className="text-[11px] font-semibold uppercase tracking-[.16em] text-slate-400">
+                  Original evidence
+                </p>
+                <blockquote className="mt-3 border-l-4 border-blue-500 bg-slate-50 p-4 text-sm leading-7 text-slate-700">
+                  {value("source_text", "excerpt", "evidence", "text") ||
+                    "Source text not provided by the traceability service."}
+                </blockquote>
+              </section>
+              <section>
+                <p className="text-[11px] font-semibold uppercase tracking-[.16em] text-slate-400">
+                  Scoring
+                </p>
+                <div className="mt-3 grid grid-cols-2 gap-3">
+                  {[
+                    ["Importance", result.importance_score],
+                    ["Confidence", result.confidence_score],
+                    ["Combined", value("combined_score")],
+                    ["Similarity", result.similarity_score],
+                  ]
+                    .filter(
+                      ([, score]) => score !== undefined && score !== null,
+                    )
+                    .map(([label, score]) => (
+                      <div
+                        key={String(label)}
+                        className="rounded-lg border border-slate-200 p-3"
+                      >
+                        <p className="text-xs text-slate-400">{label}</p>
+                        <p className="mt-1 font-mono text-sm font-semibold text-[#102a43]">
+                          {typeof score === "number"
+                            ? score.toFixed(3)
+                            : String(score)}
+                        </p>
+                      </div>
+                    ))}
+                </div>
+              </section>
+            </>
+          )}
+        </div>
+      </aside>
+    </div>
+  );
+}
+function Query() {
+  const [text, setText] = useState("");
+  const [data, setData] = useState<any>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [selected, setSelected] = useState<Result | null>(null);
+  const submit = async () => {
+    if (!text.trim()) return;
+    setBusy(true);
+    setError("");
+    try {
+      setData(
+        await requestJson("/api/query", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query: text, top_k: 5 }),
+        }),
+      );
+    } catch (error) {
+      setError(apiError(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const results = (data?.results ||
+    data?.facts ||
+    data?.evidence ||
+    []) as Result[];
+  return (
+    <div className="flex flex-col gap-6">
+      <div>
+        <p className="text-sm leading-6 text-slate-500">
+          Ask questions about your indexed documents. Every answer is returned
+          as ranked evidence, never generated prose.
+        </p>
+      </div>
+      <div className="rounded-xl border border-slate-200 bg-white p-5">
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <div className="relative flex-1">
+            <Search
+              size={17}
+              className="absolute left-3 top-3.5 text-slate-400"
+            />
+            <input
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              onKeyDown={(e) => {
+                if (
+                  e.key === "Enter" &&
+                  !e.nativeEvent.isComposing &&
+                  e.keyCode !== 229
+                )
+                  submit();
+              }}
+              placeholder="What is the daily withdrawal limit?"
+              className="w-full rounded-lg border border-slate-300 py-3 pl-10 pr-4 text-sm outline-none ring-blue-500 transition focus:ring-2"
+            />
+          </div>
+          <button
+            onClick={submit}
+            disabled={busy || !text.trim()}
+            className="rounded-lg bg-[#102a43] px-5 py-3 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            {busy ? "Searching…" : "Search evidence"}
+          </button>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <span className="text-xs text-slate-400">Try:</span>
+          {["What are the key limits?", "Which clauses require approval?"].map(
+            (q) => (
+              <button
+                key={q}
+                onClick={() => setText(q)}
+                className="text-xs font-medium text-blue-600 hover:underline"
+              >
+                {q}
+              </button>
+            ),
+          )}
+        </div>
+      </div>
+      {error && (
+        <div
+          role="alert"
+          className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900"
+        >
+          {error}
+        </div>
+      )}
+      {data?.status === "OUT_OF_DOMAIN" ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-6">
+          <div className="flex gap-3">
+            <AlertCircle className="shrink-0 text-amber-600" size={20} />
+            <div>
+              <h2 className="font-semibold text-amber-900">
+                Query outside indexed domain
+              </h2>
+              <p className="mt-1 text-sm leading-6 text-amber-800">
+                {data.message ||
+                  "This query is outside the indexed document domain."}
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : results.length > 0 ? (
+        <div className="flex flex-col gap-4">
+          {results.map((result, index) => (
+            <article
+              key={`${result.trace_id || `${result.document_id}-${result.section_id}`}-${index}`}
+              className="rounded-xl border border-slate-200 bg-white p-5"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[.16em] text-blue-600">
+                    Evidence {String(index + 1).padStart(2, "0")}
+                  </p>
+                  <p className="mt-2 text-base font-semibold leading-7 text-[#102a43]">
+                    {result.fact_text}
+                  </p>
+                </div>
+                <button
+                  onClick={() =>
+                    result.trace_id ? setSelected(result) : undefined
+                  }
+                  disabled={!result.trace_id}
+                  className="shrink-0 rounded-lg border border-blue-200 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400"
+                >
+                  {result.trace_id ? "Drill Down" : "Trace unavailable"}
+                </button>
+              </div>
+              <div className="mt-4 flex flex-wrap gap-4 text-xs text-slate-500">
+                <span>
+                  Importance{" "}
+                  <b className="font-mono text-slate-700">
+                    {result.importance_score?.toFixed(3)}
+                  </b>
+                </span>
+                <span>
+                  Confidence{" "}
+                  <b className="font-mono text-slate-700">
+                    {result.confidence_score?.toFixed(3)}
+                  </b>
+                </span>
+                <span>
+                  Similarity{" "}
+                  <b className="font-mono text-slate-700">
+                    {result.similarity_score?.toFixed(3)}
+                  </b>
+                </span>
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : data ? (
+        <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
+          No matching evidence was returned.
+        </div>
+      ) : null}
+      {selected && (
+        <SourceDrawer result={selected} onClose={() => setSelected(null)} />
+      )}
+    </div>
+  );
+}
+function LegacyQuery() {
+  const [text, setText] = useState("");
+  const [data, setData] = useState<any>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const submit = async () => {
+    if (!text.trim()) return;
+    setBusy(true);
+    setError("");
+    try {
+      setData(
+        await requestJson("/api/query", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query: text, top_k: 5 }),
+        }),
+      );
+    } catch (error) {
+      setError(apiError(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="flex flex-col gap-6">
+      <div>
+        <p className="text-sm leading-6 text-slate-500">
+          Ask questions about your indexed documents. Every answer is returned
+          as ranked evidence, never generated prose.
+        </p>
+      </div>
+      <div className="rounded-xl border border-slate-200 bg-white p-5">
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <div className="relative flex-1">
+            <Search
+              size={17}
+              className="absolute left-3 top-3.5 text-slate-400"
+            />
+            <input
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              onKeyDown={(e) => {
+                if (
+                  e.key === "Enter" &&
+                  !e.nativeEvent.isComposing &&
+                  e.keyCode !== 229
+                )
+                  submit();
+              }}
+              placeholder="What is the daily withdrawal limit?"
+              className="w-full rounded-lg border border-slate-300 py-3 pl-10 pr-4 text-sm outline-none ring-blue-500 transition focus:ring-2"
+            />
+          </div>
+          <button
+            onClick={submit}
+            disabled={busy || !text.trim()}
+            className="rounded-lg bg-[#102a43] px-5 py-3 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            {busy ? "Searching…" : "Search evidence"}
+          </button>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <span className="text-xs text-slate-400">Try:</span>
+          {["What are the key limits?", "Which clauses require approval?"].map(
+            (q) => (
+              <button
+                key={q}
+                onClick={() => setText(q)}
+                className="text-xs font-medium text-blue-600 hover:underline"
+              >
+                {q}
+              </button>
+            ),
+          )}
+        </div>
+      </div>
+      {error && (
+        <div
+          role="alert"
+          className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900"
+        >
+          {error}
+        </div>
+      )}
+      {data?.status === "OUT_OF_DOMAIN" ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-6">
+          <div className="flex gap-3">
+            <AlertCircle className="shrink-0 text-amber-600" size={20} />
+            <div>
+              <h2 className="font-semibold text-amber-950">
+                No relevant information found
+              </h2>
+              <p className="mt-1 text-sm leading-6 text-amber-900/70">
+                This question appears to be outside the scope of your indexed
+                documents.
+              </p>
+              <div className="mt-5 grid gap-3 text-sm sm:grid-cols-3">
+                <div>
+                  <div className="text-xs text-amber-900/60">
+                    Best similarity
+                  </div>
+                  <div className="mt-1 font-bold text-amber-950">
+                    {Number(data.best_similarity).toFixed(4)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-amber-900/60">
+                    Required threshold
+                  </div>
+                  <div className="mt-1 font-bold text-amber-950">
+                    {Number(data.threshold).toFixed(4)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-amber-900/60">
+                    Relevant facts
+                  </div>
+                  <div className="mt-1 font-bold text-amber-950">0</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : data?.status === "EMPTY_CORPUS" ? (
+        <Empty
+          title="No indexed corpus"
+          body="Process documents before searching the intelligence layer."
+        />
+      ) : data?.results?.length ? (
+        <div className="flex flex-col gap-3">
+          {data.results.map((r: Result, i: number) => (
+            <div
+              key={`${r.document_id}-${i}`}
+              className="rounded-xl border border-slate-200 bg-white p-5"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-center g{result.trace_id?'Drill Down':'Trace unavailable'}ap-2">
+                  <span className="rounded bg-blue-50 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-blue-700">
+                    {r.fact_type}
+                  </span>
+                  <span className="text-xs text-slate-400">
+                    Evidence {String(i + 1).padStart(2, "0")}
+                  </span>
+                </div>
+                <span className="text-sm font-bold text-[#102a43]">
+                  {(r.similarity_score * 100).toFixed(1)}%
+                </span>
+              </div>
+              <p className="mt-4 text-[15px] leading-7 text-slate-700">
+                {r.fact_text}
+              </p>
+              <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 border-t border-slate-100 pt-3 text-xs text-slate-500">
+                <span>
+                  Importance{" "}
+                  <b className="text-slate-700">
+                    {Number(r.importance_score).toFixed(3)}
+                  </b>
+                </span>
+                <span>
+                  Confidence{" "}
+                  <b className="text-slate-700">
+                    {Number(r.confidence_score).toFixed(3)}
+                  </b>
+                </span>
+                <span>
+                  Source <b className="text-slate-700">{r.document_id}</b>
+                </span>
+                <span>
+                  Section <b className="text-slate-700">{r.section_id}</b>
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : data ? (
+        <Empty
+          title="No evidence returned"
+          body="Try a more specific question about your indexed documents."
+        />
+      ) : null}
+    </div>
+  );
+}
+function Placeholder({ title, body }: { title: string; body: string }) {
+  return <Empty title={title} body={body} />;
+}
+export default function Home() {
+  const [page, setPage] = useState("overview");
+  const [docs, setDocs] = useState<Doc[]>([]);
+  useEffect(() => {
+    requestJson("/api/documents")
+      .then((data) => setDocs(data.documents || []))
+      .catch(() => {});
+  }, []);
+  const content = useMemo(
+    () =>
+      page === "documents" ? (
+        <Documents docs={docs} setDocs={setDocs} />
+      ) : page === "query" ? (
+        <Query />
+      ) : page === "evaluation" ? (
+        <Placeholder
+          title="Evaluation workspace"
+          body="Evaluation metrics will appear here once labeled query sets are connected. No metrics are fabricated."
+        />
+      ) : page === "settings" ? (
+        <Placeholder
+          title="Workspace settings"
+          body="Configure the local Python service, scoring thresholds, and future persistence integrations here."
+        />
+      ) : (
+        <Dashboard docs={docs} setPage={setPage} />
+      ),
+    [page, docs],
+  );
+  return (
+    <div className="flex min-h-screen bg-[#f7f8fa]">
+      <Nav page={page} setPage={setPage} />
+      <main className="min-w-0 flex-1">
+        <Header page={page} />
+        <div className="mx-auto max-w-[1440px] p-5 sm:p-8">{content}</div>
+      </main>
+    </div>
+  );
+}
