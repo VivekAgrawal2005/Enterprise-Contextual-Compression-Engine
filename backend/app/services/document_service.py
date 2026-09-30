@@ -63,7 +63,8 @@ class CorpusService:
                 doc['facts_extracted'] = stats.get('total_facts', len(facts))
                 doc['retained_facts'] = stats.get('selected_facts', len(facts))
                 doc['compression_stats'] = stats
-                self.structures[doc['document_id']] = engine.drilldown
+                for document_id in engine.drilldown.get_all_documents():
+                    self.structures[document_id] = engine.drilldown
             except Exception as exc:
                 doc['status'] = 'Failed'
                 doc['error'] = str(exc)
@@ -77,11 +78,45 @@ class CorpusService:
     def get_source(self, trace_id: str):
         for fact in self.facts:
             if self.trace_id_for_fact(fact) == trace_id:
+                source = fact.get('source') or {}
+                document_id = fact.get('document_id') or source.get('document_id')
+                section_id = fact.get('section_id') or source.get('section_id')
+                paragraph_id = fact.get('paragraph_id') or source.get('paragraph_id')
+                drilldown = self.structures.get(document_id)
+
+                if drilldown:
+                    source_info = drilldown.get_fact_source(fact)
+                    if source_info:
+                        paragraph = source_info['paragraph']
+                        return {
+                            'trace_id': trace_id,
+                            'document_id': document_id,
+                            'section_id': section_id,
+                            'paragraph_id': paragraph_id,
+                            'section_title': source_info.get('section_title', 'Unknown Section'),
+                            'paragraph_text': paragraph.get('text', ''),
+                            'text': paragraph.get('text', ''),
+                        }
+
+                trace_info = drilldown.traceability.get_trace_info(trace_id) if drilldown else None
+                if trace_info:
+                    original_text = trace_info.get('original_text', '')
+                    if original_text:
+                        return {
+                            'trace_id': trace_id,
+                            'document_id': document_id,
+                            'section_id': section_id,
+                            'paragraph_id': paragraph_id,
+                            'section_title': section_id or 'Unknown Section',
+                            'paragraph_text': original_text,
+                            'text': original_text,
+                        }
+
                 if self.query_engine:
                     return self.query_engine.get_source_text(fact) or {
-                        'document_id': fact.get('document_id'),
+                        'document_id': document_id,
                         'paragraph_text': '',
-                        'section_title': fact.get('section_id', 'Unknown'),
+                        'section_title': section_id or 'Unknown Section',
                     }
         return None
 
