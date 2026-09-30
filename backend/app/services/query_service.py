@@ -27,11 +27,19 @@ class QueryService:
                 'results': [],
             }
 
+        enriched_results = [
+            {
+                **result,
+                'trace_id': corpus.trace_id_for_fact(result),
+            }
+            for result in results
+        ]
+
         return {
             'status': 'OK',
             'best_similarity': best_similarity,
             'threshold': self.OUT_OF_DOMAIN_THRESHOLD,
-            'results': results,
+            'results': enriched_results,
         }
 
 
